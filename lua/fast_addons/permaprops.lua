@@ -1,6 +1,3 @@
-
-if CLIENT then render.MaterialOverride = SetMaterialOverride end
-
 local function HOOK(name) hook.Add(name, "permaprops", permaprops[name]) end
 
 permaprops = {}
