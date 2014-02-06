@@ -11,7 +11,7 @@ local function compare(a, b)
 end
 
 local function comparenick(a, b)
-	local MatchTransliteration = GLib and GLib.UTF8 and GLib.UTF8.MatchTransliteration 
+	local MatchTransliteration = GLib and GLib.UTF8 and GLib.UTF8.MatchTransliteration
 	if not MatchTransliteration then return compare (a, b) end
 	
 	if a == b then return true end
@@ -125,7 +125,7 @@ function easylua.FindEntity(str)
 			end
 
 			if found then
-				local func = CreateAllFuncton(function(v) return v:GetClass():lower() == class end)
+				local func = CreateAllFunction(function(v) return v:GetClass():lower() == class end)
 				print(func:GetName())
 				return func
 			end
@@ -235,7 +235,7 @@ function easylua.FindEntity(str)
 	end
 end
 
-function easylua.CreateEntity(class)
+function easylua.CreateEntity(class, callback)
 	local mdl = "error.mdl"
 
 	if IsEntity(class) and class:IsValid() then
@@ -248,6 +248,10 @@ function easylua.CreateEntity(class)
 		this:SetModel(mdl)
 	else
 		this = ents.Create(class)
+	end
+
+	if callback and type(callback) == 'function' then
+		callback(this);
 	end
 
 	this:Spawn()
@@ -368,7 +372,7 @@ function easylua.End()
 		for key, value in pairs(s.vars) do
 			if s.oldvars and s.oldvars[key] then
 				_G[key] = s.oldvars[key]
-			else 
+			else
 				_G[key] = nil
 			end
 		end
@@ -469,15 +473,15 @@ hook.Add("LuaDevProcess","easylua",function(stage,script,info,extra,func)
 			easylua.End()
 		end
 		
-		if not istable(extra) or not IsValid(extra.ply) or not script or extra.easylua==false then 	
-			return 
+		if not istable(extra) or not IsValid(extra.ply) or not script or extra.easylua==false then
+			return
 		end
 			
 		insession = true
 		easylua.Start(extra.ply)
 		
 		local t={}
-		for key, value in pairs(easylua.vars or {}) do	
+		for key, value in pairs(easylua.vars or {}) do
 			t[#t+1]=key
 		end
 		if #t>0 then
@@ -489,12 +493,12 @@ hook.Add("LuaDevProcess","easylua",function(stage,script,info,extra,func)
 				
 	elseif stage==STAGE_COMPILED then
 		
-		if not istable(extra) or not IsValid(extra.ply) or not isfunction(func) or extra.easylua==false then 	
+		if not istable(extra) or not IsValid(extra.ply) or not isfunction(func) or extra.easylua==false then
 			if insession then
 				insession=false
 				easylua.End()
 			end
-			return 
+			return
 		end
 
 		if insession then
@@ -595,13 +599,13 @@ do -- all
 		end
 	end
 	
-	function CreateAllFuncton(func)
+	function CreateAllFunction(func)
 		return setmetatable({func = func}, META)
 	end
 
-	all = CreateAllFuncton(function(v) return v:IsPlayer() end)
-	props = CreateAllFuncton(function(v) return v:GetClass() == "prop_physics" end)
-	-- props = CreateAllFuncton(function(v) return util.IsValidPhysicsObject(vm) end)
-	bots = CreateAllFuncton(function(v) return v:IsPlayer() and v:IsBot() end)
-	these = CreateAllFuncton(function(v) return easylua and table.HasValue(constraint.GetAllConstrainedEntities(this), v) end)
+	all = CreateAllFunction(function(v) return v:IsPlayer() end)
+	props = CreateAllFunction(function(v) return v:GetClass() == "prop_physics" end)
+	-- props = CreateAllFunction(function(v) return util.IsValidPhysicsObject(vm) end)
+	bots = CreateAllFunction(function(v) return v:IsPlayer() and v:IsBot() end)
+	these = CreateAllFunction(function(v) return easylua and table.HasValue(constraint.GetAllConstrainedEntities(this), v) end)
 end

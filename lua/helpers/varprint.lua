@@ -1,12 +1,12 @@
 function varprint(...)
 	local args = {...}
 
-	if #args == 0 then return end	
+	if #args == 0 then return end
 
 	Msg((debug.getinfo(2, "n").name or "unknown") .. ":\n")
 
 	-- it will only align correctly for variable names below 16 characters.
-	-- I don't think there is need to make it support for anything higher since 99% 
+	-- I don't think there is need to make it support for anything higher since 99%
 	-- of all var names are below 16 characters so the amount code for supporting > 16 chars
 	-- will not be worth making
 

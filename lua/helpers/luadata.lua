@@ -187,6 +187,20 @@ do -- file extension
 end
 
 do -- option extension
+	pcall(require, "glon")
+	
+	local decode
+	local encode
+	
+	if not glon then 
+	
+		-- oh no!
+		decode = util.JSONToTable
+		encode = util.TableToJSON
+		
+		MsgN("[luadata] reverting to json since glon cannot be found")
+	end
+
 	function luadata.AccessorFunc(tbl, func_name, var_name, nw, def)
 		tbl["Set" .. func_name] = function(self, val)
 			self[nw and "SetLuaDataNWOption" or "SetLuaDataOption"](self, var_name, val or def)
@@ -204,7 +218,7 @@ do -- option extension
 
 		for key, value in pairs(self.LuaDataOptions) do
 			if key:sub(0, 3) == "_nw" then
-				self:SetNWString("ld_" .. key:sub(4), glon.encode(value))
+				self:SetNWString("ld_" .. key:sub(4), encode(value))
 			end
 		end
 	end
@@ -234,7 +248,7 @@ do -- option extension
 
 	function meta:SetLuaDataNWOption(key, value)
 		self:SetLuaDataOption("_nw"..key, value)
-		self:SetNWString("ld_" .. key, glon.encode(value))
+		self:SetNWString("ld_" .. key, encode(value))
 	end
 
 	function meta:GetLuaDataNWOption(key, def)
@@ -250,6 +264,6 @@ do -- option extension
 
 		value = self:GetNWString("ld_" .. key, false)
 
-		return type(value) == "string" and glon.decode(value) or def
+		return type(value) == "string" and decode(value) or def
 	end
 end

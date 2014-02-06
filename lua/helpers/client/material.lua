@@ -23,12 +23,12 @@ function materials.ReplaceTexture(path, to)
 			tex = to:GetTexture("$basetexture")
 		else return false end
 
-		materials.Replaced[path] = materials.Replaced[path] or {}	
+		materials.Replaced[path] = materials.Replaced[path] or {}
 
 		materials.Replaced[path].OldTexture = materials.Replaced[path].OldTexture or mat:GetTexture("$basetexture")
 		materials.Replaced[path].NewTexture = tex
 
-		mat:SetTexture("$basetexture",tex) 
+		mat:SetTexture("$basetexture",tex)
 
 		return true
 	end
@@ -60,7 +60,7 @@ end
 
 function materials.RestoreAll()
 	for name, tbl in pairs(materials.Replaced) do
-		if 
+		if
 			not pcall(function()
 				if tbl.OldTexture then
 					materials.ReplaceTexture(name, tbl.OldTexture)
@@ -69,9 +69,9 @@ function materials.RestoreAll()
 				if tbl.OldColor then
 					materials.SetColor(name, tbl.OldColor)
 				end
-			end) 
-		then 
-			print("Failed to restore: " .. tostring(name)) 
+			end)
+		then
+			print("Failed to restore: " .. tostring(name))
 		end
 	end
 end

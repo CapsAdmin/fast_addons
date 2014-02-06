@@ -23,27 +23,8 @@ function Warning(msg, func)
 	delpnl:SetVisible( true )
 end
 
-function gui.OSOpenURL(str) 
-	local pnl = vgui.Create("RichText") 
-	pnl:SetPos(0, 0) 
-	pnl:SetSize(100, 100) 
-	
-	pnl:InsertClickableTextStart(str) 
-	pnl:AppendText(str) 
-	pnl:InsertClickableTextEnd() 
-	
-	pnl:MakePopup() 
-	
-	gui.EnableScreenClicker(true)
-	gui.InternalCursorMoved(0, 0)
-	
-	timer.Simple(0.1, function()
-		gui.InternalMousePressed(MOUSE_LEFT) 
-		gui.InternalMouseReleased(MOUSE_LEFT) 
-		gui.EnableScreenClicker(false)
-		pnl:Remove() 
-	end)
-end
+gui.OSOpenURL=gui.OpenURL
+
 
 local white = surface.GetTextureID("vgui/white")
 
@@ -68,22 +49,22 @@ function surface.DrawCircleEx(x, y, rad, color, res, ...)
 	
 	local spacing = (res/rad) - 0.1
 	
-	for i = 0, res do		
+	for i = 0, res do
 		local i1 = ((i+0) / res) * math.pi * 2
 		local i2 = ((i+1 + spacing) / res) * math.pi * 2
 		
 		surface.DrawLineEx(
-			x + math.sin(i1) * rad, 
-			y + math.cos(i1) * rad, 
+			x + math.sin(i1) * rad,
+			y + math.cos(i1) * rad,
 			
-			x + math.sin(i2) * rad, 
-			y + math.cos(i2) * rad, 
+			x + math.sin(i2) * rad,
+			y + math.cos(i2) * rad,
 			...
 		)
 	end
 end
 	
-do 
+do
 	local fonts = {}
 
 	-- python1320: heul,
@@ -92,7 +73,7 @@ do
 		local blur = "pretty_text_blur_" .. size .. weight
 			
 		surface.CreateFont(
-			main, 
+			main,
 			{
 				font = font,
 				size = size,
@@ -103,7 +84,7 @@ do
 		)
 		
 		surface.CreateFont(
-			blur, 
+			blur,
 			{
 				font = font,
 				size = size,
@@ -113,9 +94,9 @@ do
 			}
 		)
 		
-		return 
+		return
 		{
-			main = main, 
+			main = main,
 			blur = blur,
 		}
 	end
@@ -128,7 +109,7 @@ do
 	local surface_SetTextPos = surface.SetTextPos
 	local surface_DrawText = surface.DrawText
 
-	function surface.DrawPrettyText(text, x, y, font, size, weight, blursize, color1, color2)
+	function surface.DrawPrettyText(text, x, y, font, size, weight, blursize, color1, color2, x_align, y_align)
 		font = font or "Arial"
 		size = size or 14
 		weight = weight or 0
@@ -136,10 +117,20 @@ do
 		color1 = color1 or def_color1
 		color2 = color2 or def_color2
 		
-		fonts[font] = fonts[font] or {}
-		fonts[font][size] = fonts[font][size] or {}
-		fonts[font][size][weight] = fonts[font][size][weight] or {}
-		fonts[font][size][weight][blursize] = fonts[font][size][weight][blursize] or create_fonts(font, size, weight, blursize)
+		if not fonts[font] then fonts[font] = {} end
+		if not fonts[font][size] then fonts[font][size] = {} end
+		if not fonts[font][size][weight] then fonts[font][size][weight] = {} end
+		if not fonts[font][size][weight][blursize] then fonts[font][size][weight][blursize] = create_fonts(font, size, weight, blursize) end
+		
+		if x_align then
+			local w = surface.GetPrettyTextSize(text, font, size, weight, blursize)
+			x = x + (w * x_align)
+		end
+		
+		if y_align then
+			local _, h = surface.GetPrettyTextSize(text, font, size, weight, blursize)
+			y = y + (h * y_align)
+		end
 		
 		surface_SetFont(fonts[font][size][weight][blursize].blur)
 		surface_SetTextColor(color2)
@@ -153,6 +144,21 @@ do
 		surface_SetTextColor(color1)
 		surface_SetTextPos(x, y)
 		surface_DrawText(text)
+	end
+	
+	function surface.GetPrettyTextSize(text, font, size, weight, blursize)
+		font = font or "Arial"
+		size = size or 14
+		weight = weight or 0
+		blursize = blursize or 1
+	
+		if not fonts[font] then fonts[font] = {} end
+		if not fonts[font][size] then fonts[font][size] = {} end
+		if not fonts[font][size][weight] then fonts[font][size][weight] = {} end
+		if not fonts[font][size][weight][blursize] then fonts[font][size][weight][blursize] = create_fonts(font, size, weight, blursize) end
+		
+		surface.SetFont(fonts[font][size][weight][blursize].blur)
+		return surface.GetTextSize(text)
 	end
 end
 
@@ -191,3 +197,4 @@ function Panel:CutY(pos,yes,rev)
 	local x,y=self:LocalToScreen(0,pos)
 	render.CutY(y,yes,rev)
 end
+

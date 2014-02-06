@@ -84,7 +84,7 @@ SteamID64 = SteamID64 or function(steamid)
 	
 	local data = string.Explode(":",steamid)
 
-	if !data[3] || !data[2] then return false end
+	if !data[3] or !data[2] then return false end
 
 	local ret = AbitraryPrecision.Add(data[2] + 2*data[3],OFFSET) --  A + 2*B + OFFSET
 	steamid_cache[steamid]=ret
@@ -94,7 +94,7 @@ util.SteamID64=util.SteamID64 or SteamID64
 local SteamID64=SteamID64
 
 SteamID64ToSteamID =  SteamID64ToSteamID or function(steamid64)
-	if type(steamid64) != "string" then return false end
+	if type(steamid64) ~= "string" then return false end
 
 	local id = AbitraryPrecision.Sub(steamid64,OFFSET) --  A + 2*B
 	local A = (id % 2)

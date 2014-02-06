@@ -23,7 +23,7 @@ local function __check(var, method, ...)
 
 	local arg = "???"
 
-	for i=1, math.huge do 
+	for i=1, math.huge do
 		local key, value = debug.getlocal(2, i)
 		-- I'm not sure what to do about this part with vars that have no refference
 		if value == var then
@@ -38,7 +38,7 @@ end
 
 function check(var, ...)
 	__check(var, _G.type, ...)
-end 
+end
 
 function checkclass(var, ...)
 	__check(var, function(var)
@@ -100,7 +100,7 @@ do -- entity
 
 	function META:IsPhysics()
 		return type(self) == "PhysObj" and self:IsValid()
-	end	
+	end
 
 	function META:GetType()
 		return type(self)

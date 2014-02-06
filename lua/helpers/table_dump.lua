@@ -94,38 +94,16 @@ table.markup_colors = {
 function table.tomarkup(t, colors_override)
     return toMarkup(t, colors_override or table.markup_colors)
 end
-local can=VERSION<150
-if not can then
-	local f=file.Find("lua/bin/*.dll",'GAME')
-	for k,v in pairs(f) do
-		if v:lower():find("console",1,true) then
-			can=true
-			break
-		end
-	end
-end
-if can then
-	require("console")
-end
-local function MsgColor(color, msg)
-    if console and console.Print then
-        console.Print(color, msg)
-    elseif MsgC then
-        MsgC(color,msg)
-    else
-		Msg(msg)
-	end
-end
 
 function table.print(tbl, colors_override)
     local markup = table.tomarkup(tbl, colors_override)
     local jn = true
     for oi = 1, #markup do
         local object = markup[oi]
-        MsgColor(object.c, ("\t"):rep(jn and object.i or 0)..(object.v or "")..(object.n and "\n" or ""))
+        MsgC(object.c, ("\t"):rep(jn and object.i or 0)..(object.v or "")..(object.n and "\n" or ""))
         jn = object.n
     end
-	MsgColor(table.markup_colors.default,"\n")
+	MsgC(table.markup_colors.default,"\n")
 end
 
 PrintTable = function(...) -- so we don't pass extra tables..
