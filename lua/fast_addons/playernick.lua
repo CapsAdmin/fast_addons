@@ -64,7 +64,7 @@ end
 			nick = self:RealNick()
 		end
 		for k, v in pairs(player.GetAll()) do
-			if v:Nick() == nick and v != self and not self:IsAdmin() then
+			if v:Nick() == nick and v ~= self and not self:IsAdmin() then
 				return
 			end
 		end
@@ -88,12 +88,8 @@ end
 	old.GetName = old.GetName or META.GetName or META.Nick
 
 	function META:GetName(...)
-		if playernick and playernick.IsEnabled() and type(self) == "Player" then
-			if not self.IsValid or not self:IsValid() then error("Invalid player",1) end
-			return playernick.TranslateNick(self, self:RealNick())
-		end
-
-		return old.GetName(self, ...)
+		local ok = playernick and playernick.IsEnabled() and type(self) == "Player" and self.IsValid and self:IsValid()
+		return ok and playernick.TranslateNick(self, self:RealNick()) or old.GetName(self, ...) or "Invalid player!?!?"
 	end
 
 	META.Nick = META.GetName

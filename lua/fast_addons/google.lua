@@ -33,7 +33,7 @@ if SERVER then
 
     local function well(ply, question)
 		question = question:lower()
-		if question:find("google.+?") then
+		if question:find("google",1,true) then
 			question = question:match("google.-(%a.+)?")
 
 			if not question then return end
@@ -41,9 +41,8 @@ if SERVER then
 			local _q = question
 			question = question:gsub("(%A)", function(char) return "%"..("%x"):format(char:byte()) end)
 			--print("QUESTION: ", question)
-			http.Get(
+			http.Fetch(
 				"http://suggestqueries.google.com/complete/search?client=firefox&q=" .. question .. "%20",
-				"",
 				function(str)
 				str = str
 				:Replace("[[", "")

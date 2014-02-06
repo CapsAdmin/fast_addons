@@ -74,14 +74,14 @@ end ]]
 				local eye = math.Clamp(ply:EyeAngles().p/89, 0, 1) ^ 3
 				if eye > 0.3 then
 				
-					if SERVER then				
+					if SERVER then
 						local fraction = data:GetVelocity():Length() / (GetConVarNumber("sv_maxvelocity") / 4)
 						sound.Play(("weapons/fx/rics/ric%s.wav"):format(math.random(5)), data:GetOrigin(), math.Clamp(300*fraction, 20, 150), math.Clamp(fraction*255+70, 70, 150))
 						sound.Play(("physics/plastic/plastic_barrel_impact_bullet3.wav"):format(math.random(5)), data:GetOrigin(), 100, math.Clamp(fraction*255+40, 70, 255))
 						
-						local ef = EffectData() 
-							ef:SetOrigin(data:GetOrigin()) 
-							ef:SetScale(10) 
+						local ef = EffectData()
+							ef:SetOrigin(data:GetOrigin())
+							ef:SetScale(10)
 						timer.Simple(0, function() util.Effect("StunstickImpact", ef) end)
 					end
 					

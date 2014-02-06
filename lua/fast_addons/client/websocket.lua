@@ -107,7 +107,7 @@ end
 function WebSocket(url, protocol)
 	protocol = protocol or ""
 	
-	if not websocket_panel:IsValid() then 
+	if not websocket_panel:IsValid() then
 		create_html_panel()
 	end
 	

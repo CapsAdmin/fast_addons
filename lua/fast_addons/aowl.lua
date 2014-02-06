@@ -1,9 +1,12 @@
-if not easylua then error("aowl requires easylua!") end
+assert(FAST_ADDON_EASYLUA, "aowl requires easylua!")
+assert(FAST_ADDON_LUADATA, "aowl requires luadata!")
+pcall(include, "autorun/translation.lua") local L = translation and translation.L or function(s) return s end
 
 aowl = aowl or {} local s = aowl
 
-timer.Simple(1, function() hook.Run("AowlInitialized") end)
+local USERSFILE = "aowl/users.txt"
 
+timer.Simple(1, function() hook.Run("AowlInitialized") end)
 CreateConVar("aowl_hide_ranks", "1", FCVAR_REPLICATED)
 
 aowl.Prefix			= "[!|/|%.]" -- a pattern
@@ -12,8 +15,11 @@ aowl.ArgSepPattern	= "[,]" -- would you imagine that yet another one
 aowl.EscapePattern	= "[\\]" -- holy shit another one! holy shit again they are all teh same length! Unintentional! I promise!!1
 team.SetUp(1, "default", Color(68, 112, 146))
 
-function aowlMsg(addition)
-	MsgC(Color(51,255,204), "[aowl]"..(addition and ' '..tostring(addition) or "")..' ')
+function aowlMsg(cmd, line)
+	if hook.Run("AowlMessage", cmd, line) ~= false then
+		MsgC(Color(51,255,204), "[aowl]"..(cmd and ' '..tostring(cmd) or "")..' ')
+		MsgN(line)
+	end
 end
 
 local function compare(a, b)
@@ -136,21 +142,35 @@ do -- util
 	
 	function aowl.AvatarForSteamID(steamid, callback)
 		local commid = aowl.SteamIDToCommunityID(steamid)
-		http.Get("http://steamcommunity.com/profiles/" .. commid .. "?xml=1", "", function(content, size)
+		http.Fetch("http://steamcommunity.com/profiles/" .. commid .. "?xml=1", function(content, size)
 			local ret = content:match("<avatarIcon><!%[CDATA%[(.-)%]%]></avatarIcon>")
 			callback(ret)
 		end)
 	end
 
+	local NOTIFY = {
+		GENERIC	= 0,
+		ERROR	= 1,
+		UNDO	= 2,
+		HINT	= 3,
+		CLEANUP	= 4,
+	}
 	function aowl.Message(ply, msg, type, duration)
 		ply = ply or all
 		duration = duration or 5
-		ply:SendLua(string.format("local s=%q notification.AddLegacy(s, NOTIFY_%s, %s) MsgN(s)", "aowl: " .. msg, type and type:upper() or "GENERIC", duration))
+		ply:SendLua(string.format(
+			"local s=%q notification.AddLegacy(s,%u,%s) MsgN(s)",
+			"aowl: " .. msg,
+			NOTIFY[(type and type:upper())] or NOTIFY.GENERIC,
+			duration
+		))
 	end
 end
 
 do -- commands
 	function aowl.CallCommand(ply, cmd, line, args)
+		if ply.IsBanned and ply:IsBanned() and not ply:IsAdmin() then return end
+
 		local steamid
 
 		if type(ply) == "string" and ply:find("STEAM_") then
@@ -170,13 +190,15 @@ do -- commands
 					allowed, reason = cmd.callback(ply, line, unpack(args))
 					easylua.End()
 				end
-
-				if allowed == false and ply:IsValid() then
+				
+				if ply:IsValid() then
 					if reason then
-						aowl.Message(ply, reason, "error")
+						aowl.Message(ply, reason, allowed==false and 'error' or 'generic')
 					end
-
-					ply:EmitSound("buttons/button8.wav", 100, 120)
+					
+					if allowed==false then
+						ply:EmitSound("buttons/button8.wav", 100, 120)
+					end
 				end
 			end
 		end)
@@ -186,7 +208,7 @@ do -- commands
 		end
 	end
 
-	function aowl.CMDInternal(ply, _, args)
+	function aowl.CMDInternal(ply, _, args, line)
 		if aowl.cmds[args[1]] then
 			local cmd = args[1]
 			table.remove(args, 1)
@@ -233,7 +255,66 @@ do -- added commands
 	function aowl.TargetNotFound(target)
 		return string.format("could not find: %q", target or "<no target>")
 	end
-		
+	
+	do -- kill cmd
+		if CLIENT then
+			usermessage.Hook("aowl_kill", function(umr)
+				local ply = umr:ReadEntity()
+				local vel = umr:ReadLong()
+				local angvel = umr:ReadLong()
+								
+				if ply:IsValid() then
+					local id = "find_rag_" .. ply:EntIndex()
+					
+					timer.Create(id, 0, 100, function()
+						if not ply:IsValid() then return end
+						local rag = ply:GetRagdollEntity() or NULL
+						if rag:IsValid() then
+							local phys = rag:GetPhysicsObject() or NULL
+							if phys:IsValid() then
+								local vel = ply:GetAimVector() * vel
+								local angvel = VectorRand() * angvel
+								for i = 0, rag:GetPhysicsObjectCount()-1 do
+									local phys = rag:GetPhysicsObjectNum(i)	or NULL
+									if phys:IsValid() then
+										phys:SetVelocity(vel)
+										phys:AddAngleVelocity(angvel)
+									end
+								end
+								phys:SetVelocity(vel)
+								phys:AddAngleVelocity(angvel)
+								timer.Remove(id)
+							end
+						end
+					end)
+				end
+			end)
+		end
+
+		if SERVER then
+			aowl.AddCommand({"suicide", "die", "kill", "wrist"},function(ply, line, vel, angvel)
+				if ply.last_rip and CurTime() - ply.last_rip < 0.05 then
+					return
+				end
+
+				ply.last_rip = CurTime()
+
+				vel = tonumber(vel)
+				angvel = tonumber(angvel)
+
+				ply:Kill()
+				
+				if vel then
+					umsg.Start("aowl_kill")
+						umsg.Entity(ply)
+						umsg.Long(vel)
+						umsg.Long(angvel or 0)
+					umsg.End()
+				end
+			end)
+		end
+	end
+	
 	if SERVER then
 		do -- move
 			aowl.AddCommand("message", function(_,_, msg, duration, type)
@@ -249,66 +330,6 @@ do -- added commands
 
 			end, "developers")
 	
-	
-			-- todo: rate limit?
-			aowl.AddCommand("tp", function(pl)
-				-- shameless hack
-				if pl.in_rpland and pl.Unrestricted ~= true then
-					return false,"No teleporting in RP"
-				end
-				
-				local start = pl:GetPos()+Vector(0,0,1)
-				local pltr=pl:GetEyeTrace()
-
-				local endpos = pltr.HitPos
-				local wasinworld=util.IsInWorld(start)
-
-				local diff=start-endpos
-				local len=diff:Length()
-				len=len>100 and 100 or len
-				diff:Normalize()
-				diff=diff*len
-				--start=endpos+diff
-
-				if not wasinworld and util.IsInWorld(endpos-pltr.HitNormal*120) then
-					pltr.HitNormal=-pltr.HitNormal
-				end
-				start=endpos+pltr.HitNormal*120
-
-				if math.abs(endpos.z-start.z)<2 then 
-					endpos.z=start.z
-					--print"spooky match?"
-				end
-						
-				local tracedata = {start=start,endpos=endpos}
-						
-				tracedata.filter = pl
-				tracedata.mins = Vector( -16, -16, 0 )
-				tracedata.maxs = Vector( 16, 16, 72 )
-				tracedata.mask = MASK_SHOT_HULL
-				local tr = util.TraceHull( tracedata )
-
-				if tr.StartSolid or (wasinworld and not util.IsInWorld(tr.HitPos)) then 
-					tr = util.TraceHull( tracedata )
-					tracedata.start=endpos+pltr.HitNormal*3
-					
-				end
-				if tr.StartSolid or (wasinworld and not util.IsInWorld(tr.HitPos)) then 
-					tr = util.TraceHull( tracedata )
-					tracedata.start=pl:GetPos()+Vector(0,0,1)
-					
-				end
-				if tr.StartSolid or (wasinworld and not util.IsInWorld(tr.HitPos)) then 
-					tr = util.TraceHull( tracedata )
-					tracedata.start=endpos+diff
-					
-				end
-				if tr.StartSolid then return false,"unable to perform teleportation without getting stuck" end
-				if not util.IsInWorld(tr.HitPos) and wasinworld then return false,"couldnt teleport there" end
-				pl.aowl_tpprevious = pl:GetPos()
-				pl:SetPos(tr.HitPos)
-				pl:EmitSound"ui/freeze_cam.wav"
-			end)
 
 			local t = {start=nil,endpos=nil,mask=MASK_PLAYERSOLID,filter=nil}
 			local function IsStuck(ply)
@@ -324,7 +345,7 @@ do -- added commands
 			-- helper
 			local function SendPlayer( from, to )
 				if not to:IsInWorld() then
-					return false 
+					return false
 				end
 				
 				local times=16
@@ -346,7 +367,7 @@ do -- added commands
 					ang.y=origy+(-1)^i*(i/times)*180
 					
 					from:SetPos(pos+ang:Forward()*64+Vector(0,0,10))
-					if not IsStuck(from) then return true end 
+					if not IsStuck(from) then return true end
 				end
 				
 				from:SetPos(frompos)
@@ -366,7 +387,7 @@ do -- added commands
 
 				for k,v in pairs(aowl.GotoLocations) do
 					local loc, map = k:match("(.*)@(.*)")
-					if target and target == k or (map and loc == target and string.find(game.GetMap(), "^" .. map)) then
+					if target == k or (target and map and loc:lower():Trim():find(target) and string.find(game.GetMap(), "^" .. map)) then
 						if type(v) == "Vector" then
 							if ply:InVehicle() then
 								ply:ExitVehicle()
@@ -404,7 +425,7 @@ do -- added commands
 						ply:DropToFloor()
 					end
 					
-					aowlMsg("GoTo") print(tostring(ply) .." -> ".. tostring(ent))
+					aowlMsg("goto", tostring(ply) .." -> ".. tostring(ent))
 					
 					if ply.UnStuck then
 						timer.Simple(1,function()
@@ -417,6 +438,9 @@ do -- added commands
 					ply:SetEyeAngles((ent:EyePos() - ply:EyePos()):Angle())
 					ply:EmitSound("buttons/button15.wav")
 					--ply:EmitSound("npc/dog/dog_footstep_run"..math.random(1,8)..".wav")
+					ply:SetVelocity(-ply:GetVelocity())
+					
+					hook.Run("AowlTargetCommand", ply, "goto", ent)
 					return
 				end
 
@@ -424,16 +448,87 @@ do -- added commands
 			end
 
 
-			aowl.AddCommand("goto", function(ply, line, target)
+			local function aowl_goto(ply, line, target)
+				if ply.IsBanned and ply:IsBanned() then return false, "access denied" end
 				ply.aowl_tpprevious = ply:GetPos()
 				return Goto(ply,line,target)
+			end
+			aowl.AddCommand({"goto","warp","go"}, aowl_goto)
+	
+-- todo: rate limit?
+			aowl.AddCommand("tp", function(pl,line,target,...)
+				if target and #target>1 then
+					return aowl_goto(pl,line,target,...)
+				end
+				-- shameless hack
+				if pl.in_rpland and not pl.Unrestricted and not pl:IsAdmin() then
+					return false,"No teleporting in RP!"
+				end
+				
+				local start = pl:GetPos()+Vector(0,0,1)
+				local pltr=pl:GetEyeTrace()
+
+				local endpos = pltr.HitPos
+				local wasinworld=util.IsInWorld(start)
+
+				local diff=start-endpos
+				local len=diff:Length()
+				len=len>100 and 100 or len
+				diff:Normalize()
+				diff=diff*len
+				--start=endpos+diff
+
+				if not wasinworld and util.IsInWorld(endpos-pltr.HitNormal*120) then
+					pltr.HitNormal=-pltr.HitNormal
+				end
+				start=endpos+pltr.HitNormal*120
+
+				if math.abs(endpos.z-start.z)<2 then
+					endpos.z=start.z
+					--print"spooky match?"
+				end
+						
+				local tracedata = {start=start,endpos=endpos}
+						
+				tracedata.filter = pl
+				tracedata.mins = Vector( -16, -16, 0 )
+				tracedata.maxs = Vector( 16, 16, 72 )
+				tracedata.mask = MASK_SHOT_HULL
+				local tr = util.TraceHull( tracedata )
+
+				if tr.StartSolid or (wasinworld and not util.IsInWorld(tr.HitPos)) then
+					tr = util.TraceHull( tracedata )
+					tracedata.start=endpos+pltr.HitNormal*3
+					
+				end
+				if tr.StartSolid or (wasinworld and not util.IsInWorld(tr.HitPos)) then
+					tr = util.TraceHull( tracedata )
+					tracedata.start=pl:GetPos()+Vector(0,0,1)
+					
+				end
+				if tr.StartSolid or (wasinworld and not util.IsInWorld(tr.HitPos)) then
+					tr = util.TraceHull( tracedata )
+					tracedata.start=endpos+diff
+					
+				end
+				if tr.StartSolid then return false,"unable to perform teleportation without getting stuck" end
+				if not util.IsInWorld(tr.HitPos) and wasinworld then return false,"couldnt teleport there" end
+
+				if pl:GetVelocity():Length() > 10 * math.sqrt(GetConVarNumber("sv_gravity")) then
+					pl:EmitSound("physics/concrete/boulder_impact_hard".. math.random(1, 4) ..".wav")
+					pl:SetVelocity(-pl:GetVelocity())
+				end
+
+				pl.aowl_tpprevious = pl:GetPos()
+				pl:SetPos(tr.HitPos)
+				pl:EmitSound"ui/freeze_cam.wav"
 			end)
 	
-
+	
 			aowl.AddCommand("send", function(ply, line, who,where)
 				local who = easylua.FindEntity(who)
 
-				if who:IsPlayer() and (not who.IsAFK or who:IsAFK()) then
+				if who:IsPlayer() then
 					who.aowl_tpprevious = who:GetPos()
 					return Goto(who,"",where)
 				end
@@ -443,8 +538,8 @@ do -- added commands
 			end,"developers")
 			
 	
-			aowl.AddCommand("uptime",function() 
-				all:ChatPrint("Server uptime: "..string.NiceTime(SysTime())..' | Map uptime: '..string.NiceTime(CurTime()))
+			aowl.AddCommand("uptime",function()
+				PrintMessage(3,"Server uptime: "..string.NiceTime(SysTime())..' | Map uptime: '..string.NiceTime(CurTime()))
 			end)
 					
 			local function sleepall()
@@ -458,17 +553,17 @@ do -- added commands
 				end
 			end
 
-			aowl.AddCommand("sleep",function() 
+			aowl.AddCommand("sleep",function()
 				sleepall()
 				timer.Simple(0,sleepall)
 			end,"developers")
 
-			aowl.AddCommand({"penetrating", "pen"}, function(ply,line) 
+			aowl.AddCommand({"penetrating", "pen"}, function(ply,line)
 				for k,ent in pairs(ents.GetAll()) do
 					for i=0,ent:GetPhysicsObjectCount()-1 do
 						local pobj = ent:GetPhysicsObjectNum(i)
 						if pobj and pobj:IsPenetrating() then
-							Msg"[Aowl] "print("Penetrating object: ",ent,"Owner: ",ent:CPPIGetOwner()) 
+							Msg"[Aowl] "print("Penetrating object: ",ent,"Owner: ",ent:CPPIGetOwner())
 							if line and line:find"stop" then
 								pobj:EnableMotion(false)
 							end
@@ -481,48 +576,62 @@ do -- added commands
 			aowl.AddCommand("togglegoto", function(ply, line) -- This doesn't do what it says. Lol.
 				if not ply.GotoDisallowed then
 					ply.GotoDisallowed = true
-					aowlMsg("goto") print(tostring(ply) .." has disabled !goto")
+					aowlMsg("togglegoto", tostring(ply) .." has disabled !goto")
 				else
 					ply.GotoDisallowed = false
-					aowlMsg("goto") print(tostring(ply) .." has re-enabled !goto")
+					aowlMsg("togglegoto", tostring(ply) .." has re-enabled !goto")
 				end
 			end, "developers")
 
 			aowl.AddCommand("gotoid", function(ply, line, target)
+				if not target or string.Trim(target)=='' then return false end
+				local function loading(s)
+					ply:SendLua(string.format("local l=notification l.Kill'aowl_gotoid'l.AddProgress('aowl_gotoid',%q)",s))
+				end
+				local function kill(s,typ)
+					if not IsValid(ply) then return false end
+					ply:SendLua[[notification.Kill'aowl_gotoid']]
+					if s then aowl.Message(ply,s,typ or 'error') end
+				end
+				
 				local url
 				local function gotoip(str)
 					if not ply:IsValid() then return end
-					local ip = str:match([[Garry's Mod.-connect/(.-)">Join</a>]])
+					local ip = str:match[[In%-Game.-Garry's Mod.-steam://connect/([0-9]+%.[0-9]+%.[0-9]+%.[0-9]+%:[0-9]+).-Join]]
 					if ip then
-						aowl.Message(ply, string.format("found %s from %s", ip, target), "generic")
-						aowl.Message(ply, string.format("connecting in 3 seconds.. press jump to abort", ip, target), "generic")
+						kill(string.format("found %q from %q", ip, target),"generic")
+						aowl.Message(ply,'connecting in 5 seconds.. press jump to abort','generic')
 
 						local uid = tostring(ply) .. "_aowl_gotoid"
-						timer.Create(uid, 3, 1, function()
+						timer.Create(uid,5,1,function()
+							hook.Remove('KeyPress',uid)
+							if not IsValid(ply) then return end
+							
+							kill'connecting!'
 							ply:Cexec("connect " .. ip)
 						end)
 
 						hook.Add("KeyPress", uid, function(_ply, key)
 							if key == IN_JUMP and _ply == ply then
 								timer.Remove(uid)
-								ply:SendLua(string.format("notification.Kill('aowl_gotoid')"))
-								aowl.Message(ply, "aborted gotoid", "generic")
+								kill'aborted gotoid!'
 
-								hook.Remove("KeyPress", uid)
+								hook.Remove('KeyPress',uid)
 							end
 						end)
 					else
-						ply:SendLua(string.format("notification.Kill('aowl_gotoid')"))
-						aowl.Message(ply, "couldnt fetch the server ip from " .. target, "error")
+						kill(string.format('could not fetch the server ip from %q',target))
 					end
 				end
 				local function gotoid()
 					if not ply:IsValid() then return end
 
-					ply:SendLua(string.format("local l=notification l.Kill('aowl_gotoid')l.AddProgress('aowl_gotoid', %q)", "looking up steamid ..."))
+					loading'looking up steamid ...'
 
-					http.Get(url, "", function(str)
+					http.Fetch(url, function(str)
 						gotoip(str)
+					end,function(err)
+						kill(string.format('load error: %q',err or ''))
 					end)
 				end
 
@@ -533,10 +642,12 @@ do -- added commands
 					url = ("http://steamcommunity.com/profiles/%s/?xml=1"):format(aowl.SteamIDToCommunityID(target))
 					gotoid()
 				else
-					ply:SendLua(string.format("local l=notification l.Kill('aowl_gotoid')l.AddProgress('aowl_gotoid', %q)", "looking up steamid ..."))
+					loading'looking up player ...'
 
-					http.Get(string.format("http://steamcommunity.com/actions/Search?T=Account&K=%q", target:gsub("%p", function(char) return "%" .. ("%X"):format(char:byte()) end)), "", function(str)
+					http.Post(string.format("http://steamcommunity.com/actions/Search?T=Account&K=%q", target:gsub("%p", function(char) return "%" .. ("%X"):format(char:byte()) end)), "", function(str)
 						gotoip(str)
+					end,function(err)
+						kill(string.format('load error: %q',err or ''))
 					end)
 				end
 			end)
@@ -553,13 +664,14 @@ do -- added commands
 				local prev = ent.aowl_tpprevious
 				ent.aowl_tpprevious = ent:GetPos()
 				ent:SetPos( prev )
+				hook.Run("AowlTargetCommand", ply, "back", ent)
 			end )
 
 			aowl.AddCommand("bring", function(ply, line, target, yes)
 				
 				local ent = easylua.FindEntity(target)
 			
-				if ent:IsValid() and ent ~= ply and (not ply.IsAFK or ply:IsAFK()) then
+				if ent:IsValid() and ent ~= ply then
 					if ply:CheckUserGroupLevel("developers") or (ply.IsBanned and ply:IsBanned()) then
 					
 						if ent:IsPlayer() and not ent:Alive() then ent:Spawn() end
@@ -572,7 +684,7 @@ do -- added commands
 						ent:SetPos(ply:GetEyeTrace().HitPos + (ent:IsVehicle() and Vector(0, 0, ent:BoundingRadius()) or Vector(0, 0, 0)))
 						ent[ent:IsPlayer() and "SetEyeAngles" or "SetAngles"](ent, (ply:EyePos() - ent:EyePos()):Angle())
 						
-						aowlMsg("Bring") print(tostring(ply) .." <- ".. tostring(ent))
+						aowlMsg("bring", tostring(ply) .." <- ".. tostring(ent))
 					end
 					return
 				end
@@ -612,17 +724,22 @@ do -- added commands
 
 					return false, aowl.TargetNotFound(target) .. ", looking on another servers"
 				elseif CrossLua and not yes then
-					return false, aowl.TargetNotFound(target) .. ", try CrossServer Bring™: !bring <name>,yes"
+					return false, aowl.TargetNotFound(target) .. ", try CrossServer Bring?? !bring <name>,yes"
 				else
 					return false, aowl.TargetNotFound(target)
 				end
 			end)
-							
+			
+			aowl.AddCommand("fullupdate",function(pl) 
+				PrintMessage(HUD_PRINTTALK,pl:Name()..' fixed his unable to move after join/weapons not showing after join bug')
+				pl:SendLua[[LocalPlayer():ConCommand("record removeme",true)RunConsoleCommand'stop']]
+			end)
+			
 			do -- weapon ban
 				local META = FindMetaTable("Player")
 				luadata.AccessorFunc(META, "WeaponRestricted", "weapon_restricted", false, false)
 
-				local white_list = 
+				local white_list =
 				{
 					weapon_physgun = true,
 					gmod_tool = true,
@@ -672,15 +789,11 @@ do -- added commands
 				if ent:IsValid() then
 					ent.aowl_tpprevious = ent:GetPos()
 					ent:Spawn()
-					aowlMsg("spawn")  print(tostring(ply).." spawned ".. (ent==ply and "self" or tostring(ent)))
+					aowlMsg("spawn", tostring(ply).." spawned ".. (ent==ply and "self" or tostring(ent)))
 				end
 			end)
 						
-			aowl.AddCommand({"suicide", "die", "kill", "wrist"},function(ply)
-				ply:Kill()
-			end)
-			
-			aowl.AddCommand("drop",function(ply) 
+			aowl.AddCommand("drop",function(ply)
 				if ply:GetActiveWeapon():IsValid() then
 					ply:DropWeapon(ply:GetActiveWeapon())
 				end
@@ -728,7 +841,7 @@ do -- added commands
 
 			aowl.AddCommand({"resurrect", "respawn", "revive"}, function(ply, line, target)
 				-- shameless hack
-				if ply.died_in_rpland and not ply.Unrestricted then
+				if ply.died_in_rpland and not ply.Unrestricted and not ply:IsAdmin() then
 					return false,"Just respawn and !goto rp, sigh!"
 				end
 				
@@ -743,8 +856,11 @@ do -- added commands
 
 		do -- cheats
 
+
 			aowl.AddCommand("cheats",function(pl,line, target, yesno)
-				pcall(require,'cvar3')
+				if not GetNetChannel and not NetChannel and not CNetChan then 
+					pcall(require,'cvar3')
+				end
 				local targets = not yesno and pl or easylua.FindEntity(target)
 				if not targets or not IsValid(targets) then return false,"no target found" end
 		
@@ -759,10 +875,21 @@ do -- added commands
 				end
 			end,"developers")
 
+			aowl.AddCommand("leavemealone", function()
+				easylua.StartEntity("lua_npc_wander")
+
+					function ENT:Initialize()
+						self:Remove()
+					end
+
+				easylua.EndEntity(true, true)
+
+				return false, "Cheat activated"
+			end, "developers")
+
 		end
 		do -- restrictions
-
-			aowl.AddCommand("restrictions",function(pl,line, target, yesno)
+			aowl.AddCommand({"restrictions"},function(pl,line, target, yesno)
 				local ent = easylua.FindEntity(target)
 				local restrictions=true
 				if yesno or target then
@@ -770,7 +897,23 @@ do -- added commands
 				end
 				pl=yesno and ent or pl
 				if not IsValid(pl) then return false,"nope" end
-				pl.Unrestricted=not restrictions
+				local unrestricted  = not restrictions
+				if unrestricted  then
+					ErrorNoHalt(
+[[................./´¯/) 
+...............,/¯../ 
+............../..../ 
+......../´¯/'...'/´¯¯`·¸  
+...../'/.../..../......./¨¯\ Bitch Mode
+...('(...´...´.... ¯~/'...')  Enabled
+....\.................'...../ For
+.....''...\.......... _.·´ 
+.......\..............(  ]]..tostring(pl)..
+[[
+
+.........\.............\...]])
+				end
+				pl.Unrestricted = unrestricted
 			end,"developers")
 
 		end
@@ -793,6 +936,7 @@ do -- added commands
 				local ent = easylua.FindEntity(target)
 
 				if ent:IsPlayer() then
+					hook.Run("AowlTargetCommand", ply, "exit", ent)
 					return ent:SendLua("LocalPlayer():ConCommand('exit')")
 				end
 
@@ -800,11 +944,11 @@ do -- added commands
 			end, "developers")
 			
 			aowl.AddCommand("bot",function(pl,cmd,what)
-				if not what or what=="" then 
+				if not what or what=="" then
 					game.ConsoleCommand"bot\n"
 				elseif what=="kick" then
 					for k,v in pairs(player.GetBots()) do
-						v:Kick"bot kick"	
+						v:Kick"bot kick"
 					end
 				elseif what=="zombie" then
 					game.ConsoleCommand("bot_zombie 1\n")
@@ -829,64 +973,117 @@ do -- added commands
 					end
 					
 					local rsn = reason or "byebye!!"
-					aowlMsg("kick") print(tostring(ply).. " kicked " .. tostring(ent) .. " for " .. rsn)
 					
-					return ent:Kick(reason or "byebye!!")
+					aowlMsg("kick", tostring(ply).. " kicked " .. tostring(ent) .. " for " .. rsn)
+					hook.Run("AowlTargetCommand", ply, "kick", ent, rsn)
+					
+					return ent:Kick(rsn or "byebye!!")
 					
 				end
 
 				return false, aowl.TargetNotFound(target)
 			end, "developers")
 
+			
+			local ok={d=true,m=true,y=true,s=true,h=true}
+			local function parselength_en(line) -- no months. There has to be a ready made version of this.
+				
+				local res={}
+				
+				line=line:Trim():lower()
+				if tonumber(line)~=nil then 
+					res.m=tonumber(line)
+				elseif #line>1 then
+					line=line:gsub("%s","")
+					for dat,what in line:gmatch'([%d]+)(.)' do
+						
+						if res[what] then return false,"bad format" end
+						if not ok[what] then return false,("bad type: "..what) end
+						res[what]=tonumber(dat) or -1
+						
+					end
+				else
+					return false,"empty string"
+				end
+				
+				local len = 0
+				local d=res
+				local ok
+				if d.y then	ok=true len = len + d.y*31556926 end
+				if d.d then	ok=true len = len + d.d*86400 end
+				if d.h then	ok=true len = len + d.h*3600 end
+				if d.m then	ok=true len = len + d.m*60 end
+				if d.s then	ok=true len = len + d.s*1 end
+				
+				if not ok then return false,"nothing specified" end
+				
+				return len
+				
+			end
+			
 			aowl.AddCommand("ban", function(ply, line, target, length, reason)
 				local id = easylua.FindEntity(target)
 				local ip
-
-				if id:IsPlayer() then
-					if banni then
-						local banlen = 60*(tonumber(length) and tonumber(length)>0 and tonumber(length) or 2)
-						if not reason or reason:len()<9 then
-							banlen=banlen>60*10 and 60*10 or banlen
-						end
-						local whenunban = banni.UnixTime()+banlen
-						banni.Ban(id:SteamID(),id:Name(),IsValid(ply) and ply:SteamID() or "Console",reason or "Banned by admin",whenunban)
-						return
+				
+				if banni then
+					if not length then
+						length = 60*10
+					else
+						local len,err = parselength_en(length)
+						
+						if not len then return false,"Invalid ban length: "..tostring(err) end
+						
+						length = len
+						
 					end
+					
+					if length==0 then return false,"invalid ban length" end
+					
+					local whenunban = banni.UnixTime()+length
+					local ispl=id:IsPlayer()
+					if not ispl then	
+						if not banni.ValidSteamID(target) then
+							return false,"invalid steamid"
+						end
+					end
+					
+					local banID = ispl and id:SteamID() or target
+					local banName = ispl and id:Name() or target
+					
+					local banner = IsValid(ply) and ply:SteamID() or "Console"
+					reason = reason or "Banned by admin"
+					
+					banni.Ban(	banID,
+								banName,
+								banner,
+								reason,
+								whenunban)
+								
+					hook.Run("AowlTargetCommand", ply, "ban", banName, banID, length, reason)
+					return
+				end
+				
+					
+				if id:IsPlayer() then
 					
 					if id.SetRestricted then
 						id:ChatPrint("You have been banned for " .. (reason or "being fucking annoying") .. ". Welcome to the ban bubble.")
 						id:SetRestricted(true)
-						return 
+						return
 					else
 						ip = id:IPAddress():match("(.-):")
 						id = id:SteamID()
 					end
 				else
-					if banni then
-						
-						local banlen = 60*(tonumber(length) and tonumber(length)>0 and tonumber(length) or 2)
-						if not reason or reason:len()<10 then
-							banlen=banlen>120 and 120 or banlen
-						end
-						local whenunban = banni.UnixTime()+banlen
-						
-						if not banni.ValidSteamID(target) then
-							return false,"invalid steamid"
-						end
-						
-						banni.Ban(target,target,IsValid(ply) and ply:SteamID() or "Console",reason or "Unbanned by admin",whenunban)
-						return
-					end
-					
 					id = target
 				end
 
-				local t={"banid", tostring(length or 0), id} 
+				local t={"banid", tostring(length or 0), id}
 				game.ConsoleCommand(table.concat(t," ")..'\n')
 				
 				--if ip then RunConsoleCommand("addip", length or 0, ip) end -- unban ip??
 				timer.Simple(0.1, function()
-					local t={"kickid",id, tostring(reason or "no reason")} 
+					local t={"kickid",id, tostring(reason or "no reason")}
 					game.ConsoleCommand(table.concat(t," ")..'\n')
 					game.ConsoleCommand("writeid\n")
 				end)
@@ -894,16 +1091,16 @@ do -- added commands
 
 			aowl.AddCommand("unban", function(ply, line, target,reason)
 				local id = easylua.FindEntity(target)
-
+				
 				if id:IsPlayer() then
 					if banni then
-						banni.UnBan(id:SteamID(),IsValid(ply) and ply:SteamID() or "Console",reason or "Quick unban ingame")
+						banni.UnBan(id:SteamID(),IsValid(ply) and ply:SteamID() or "Console",reason or "Admin unban")
 						return
 					end
 					
 					if id.SetRestricted then
 						id:SetRestricted(false)
-						return 
+						return
 					else
 						id = id:SteamID()
 					end
@@ -925,7 +1122,7 @@ do -- added commands
 					
 				end
 
-				local t={"removeid",id} 
+				local t={"removeid",id}
 				game.ConsoleCommand(table.concat(t," ")..'\n')
 				game.ConsoleCommand("writeid\n")
 			end, "developers")
@@ -956,7 +1153,7 @@ do -- added commands
 				["whenunbanned"] = 1365779016,
 				["b"] = false,
 				["whenbanned"] = 1365779012,
-				["name"] = "βσμηζε ®",
+				["name"] = "β?μηζε ®",
 				["unbannersid"] = "STEAM_0:0:13073749",
 				}
 				ply:ChatPrint("Ban info: "..tostring(d.name)..' ('..tostring(d.sid)..')')
@@ -999,72 +1196,15 @@ do -- added commands
 				end
 				
 			end)
-			
-			-- alternative file? These won't work without crapton of deps.
-			local function names(caller,_,who) 
-				local ok,err = pcall(require,'date')
-				if not date then ErrorNoHalt(err) return false,"date module not loaded" end
-				
-				local pl =easylua.FindEntity(who)
-				if not IsValid(pl) or not pl:IsPlayer() then return false,"bad name" end
-				local n = pl.PastNames
-					
-				if not n then return false,"names not found" end
-				
-				local sortme={}
-					
-					--!l local s='August 12th, 2012 @ 10:30am'  :gsub(", "," ") print(os.date("%x %X",))
-				
-				local epoch = date.epoch()
-				for _,dat in pairs(n) do
-					local name = dat.newname
-					local timechanged = dat.timechanged
-					if not name and not timechanged then error"WTF" end
-					if not name or not timechanged then 
-						error"malformed data from steam" 
-					end
-						
-					local fixed = timechanged:gsub(" @ "," "):gsub(", "," "):gsub("st "," "):gsub("nd "," "):gsub("rd ", " "):gsub("th "," ")
-						
-					local ok,parsed = pcall(date,fixed)
-					
-					if not ok then error("Bad parse for "..tostring(fixed)..': '..parsed) end
-					
-					local ok,diff = pcall(date.diff,parsed,epoch)
-					
-					if not ok then error("Bad parse for "..tostring(fixed)..': '..diff) end
-						
-					local unixstamp = diff:spanseconds()
-					
-					-- August 12th, 2012 @ 10:30am
-						
-					table.insert(sortme,{name,unixstamp,timechanged})
-					
-				end
-				table.sort(sortme,function(a,b) return a[2]<b[2] end)
-				caller:ChatPrint(tostring(pl)..' names: ')
-				local maxlen=0
-				for k,v in pairs(sortme) do
-					local len = v[1]:ulen()
-					if maxlen<len then maxlen=len end
-				end
-						
-				for k,v in pairs(sortme) do
-					local name = v[1]
-					local len = name:len()
-					local pad = (" "):rep(maxlen-len)
-					caller:ChatPrint(' '..name..' '..pad..' ('..v[3]..')')
-				end
-			end
-			aowl.AddCommand("names",names)
 
 
 			aowl.AddCommand("getfile",function(pl,line,target,name)
+				if not GetNetChannel then return end
 				name=name:Trim()
 				if file.Exists(name,'GAME') then return false,"File already exists on server" end
 				local ent = easylua.FindEntity(target)
 
-				if ent:IsValid() and ent:IsPlayer() then 
+				if ent:IsValid() and ent:IsPlayer() then
 					local chan = GetNetChannel(ent)
 					if chan then
 						chan:RequestFile(name,math.random(1024,2048))
@@ -1076,10 +1216,11 @@ do -- added commands
 			end,"developers")
 
 			aowl.AddCommand("sendfile",function(pl,line,target,name)
+				if not GetNetChannel then return end
 				name=name:Trim()
 				if not file.Exists(name,'GAME') then return false,"File does not exist" end
 
-				if target=="#all" then
+				if target=="#all" or target == "@" then
 					for k,v in next,player.GetHumans() do
 						GetNetChannel(v):SendFile(name,1024+1)
 					end
@@ -1100,154 +1241,7 @@ do -- added commands
 				return false, aowl.TargetNotFound(target)
 			end,"developers")
 			
-			local gnames = {
-				["103582791430091926"] = "FPP",
-				["103582791429523489"] = "FP",
-				["103582791430264201"] = "GMOD",
-				["103582791429529038"] = "LUA1",
-				["103582791429525245"] = "LUA2",
-				["103582791430655154"] = "DECO",
-				["103582791431830407"] = "PY",
-				["103582791432344912"] = "MS",
-				["103582791433481287"] = "ADMIN",
-				["103582791429522690"] = "ULX",
-				["103582791429522385"] = "4CHAN",
-				["103582791429525550"] = "WIRE",
-				["103582791430636600"] = "WIRECORE",
-				["103582791429521412"] = "VALVE",
-				["103582791434526402"] = "MSA"
-			}
-			
-			
-			aowl.AddCommand("data",function(ply,line,who) 
-				local pl = easylua.FindEntity(who)
-				if not IsValid(pl) then return end
-				local P=function(a,...) 
-					if a then
-						local t={...}
-						for k,v in pairs(t) do
-							if not isstring(v) then t[k]=tostring(v) end
-						end
-						ply:ChatPrint(table.concat(t)) 
-					end
-				end
-				
-				P(true,"Name: ",pl:Name())
-				P(true,"UniqueID: ",pl:UniqueID())
-				P(true,"SteamID: ",pl:SteamID())
-				P(true,"SteamID64: ",pl:SteamID64())
-				P(pl.Steam,"Profile: ",pl:Steam())
-				P(true,"IP: ",pl:IPAddress())
-				local rev = pl.Reverse and pl:Reverse()
-				P(rev,"Reverse: ",rev)
-				
-				P(true,"--------------")
-					
-				local geo = pl.GeoIP and pl:GeoIP() or {}
-				local already={}
-				for k,v in pairs(geo) do
-					if already[v] then continue end
-					P(true,k:gsub("^.",string.upper):gsub("_", " ")..': ',v)
-					already[v]=true
-				end
-				if table.Count(geo)>0 then
-					P(true,"--------------")
-				end
-				
-				local dc = pl.datacraft
-				if dc then
-					P(dc.usr,"user: ",dc.usr)
-			
-					P(dc.load_time,"load_time: ",dc.load_time)
-			
-					P(dc.ScrW and dc.ScrH,"Screen: ",dc.ScrW..'x'..dc.ScrH)
-			
-					P(dc.path,"Path: ",dc.path)
-				
-					
-					
-					local games={}
-					local tr={}
-					for k,v in pairs(engine.GetGames()) do
-						tr[v.depot]=v.folder or v.title
-					end
-						
-					if dc.mnt then
-						for _,id in pairs(dc.mnt) do
-							table.insert(games,tr[id] or id)
-						end
-					end
-					if table.Count(games)>0 then
-						P(true,"Games: ",table.concat(games,', '))
-					end
-							
-						
-					P(true,"--------------")	
-				end
-					
-				if names(ply,nil,who)~=false then
-				P(true,"--------------")
-				end
-					
-				local grp = pl.GetGroupInfo and pl:GetGroupInfo()
-				
-				local groups={}
-				if grp then
-					for k,v in pairs(grp) do
-						if v then 
-							table.insert(groups,gnames[k] or k)
-						end
-					end
-				end
-				if table.Count(groups)>0 then
-					P(true,"Groups: ",table.concat(groups,', '))
-				end
-					
-				if pl.GetAPIData then
-					local communityvisibilitystates={
-					"Private", 
-					"Friends Only", 
-					"Public"
-					}
-					local personastates={
-					 [0]="Offline", 
-					 [1]="Online",
-					 [2]="Busy", 
-					 [3]="Away",
-					 [4]="Snooze",
-					 [5]="Looking to Trade",
-					 [6]="Looking to Play",
-					}
-					
-					
-					pl:GetAPIData(function(pl,what,dat) 
-						--PrintTable(dat)
-						local data = dat and 
-									 dat.response and
-									 dat.response.players and 
-									 dat.response.players[1]	
-							
-						if not data then
-									
-							P(true,"Data Not found???")
-							return
-						end
-							
-						P(true,"--------------")
-						P(data.commentpermission and data.commentpermission==0,"Comments: ","Disabled")
-						P(data.personastate and data.personastate~=1,"Status: ",data.personastate and personastates[data.personastate])
-						P(data.communityvisibilitystates and data.communityvisibilitystates~=3,"Visibility: ",data.communityvisibilitystate and communityvisibilitystates[data.communityvisibilitystate])
-						P(1,"Created: ",math.Round( ( os.time()-data.timecreated )/( 60*60*24 )  ) .." days ago")
-						P(1,"Profile: ",data.profileurl)
-						P(1,"Avatar: ",data.avatarfull)
-						P(data.primaryclanid,"Primary group: ",'http://steamcommunity.com/gid/'..tostring(data.primaryclanid))
-						P(data.gameserverip,"Server: ",tostring(data.gameserverip))
-						P(data.lastlogoff,"Last logoff: ",0.1*math.Round( ( os.time()-(data.lastlogoff or 0) )/( 60*60 )*10  ) .." hours ago")
-					end)
-				end
-			end,"developers")
-
-			aowl.AddCommand("rcon", function(ply, line)
+				aowl.AddCommand("rcon", function(ply, line)
 				line = line or ""
 
 				if false and ply:IsUserGroup("developers") then
@@ -1275,10 +1269,11 @@ do -- added commands
 					if var then
 						local cur = var:GetString()
 						RunConsoleCommand(a,b)
-						timer.Simple(0,function() timer.Simple(0,function() 
+						timer.Simple(0,function() timer.Simple(0,function()
 							local new = var:GetString()
 							pl:ChatPrint("ConVar: "..a..' '..cur..' -> '..new)
 						end)end)
+						return
 					else
 						return false,"ConVar "..a..' not found!'
 					end
@@ -1291,44 +1286,22 @@ do -- added commands
 					local var = GetConVar(a)
 					if var then
 						local val = var:GetString()
-						if not tonumber(val) then
-							val = '"'..tostring(val)..'"'
-						end
+						if not tonumber(val) then val=string.format('%q',val) end
 							
-						pl:ChatPrint("ConVar: "..a..' '..tostring())
+						pl:ChatPrint("ConVar: "..a..' '..tostring(val))
 					else
 						return false,"ConVar "..a..' not found!'
 					end
 				end
-					
-				local cand = {}
-				
-				if #cand>50 then return false,"too many results: "..#cand end	
-					
-				for k,v in pairs(cvars.GetAllConVars()) do
-					local name = v:GetName()
-					if name:find(a,1,true) then
-						table.insert(cand,{name,v:GetString()})
-					end
-				end
-
-				for k,v in pairs(cand) do
-					local val = v[2]
-					if not tonumber(val) then
-						val = '"'..tostring(val)..'"'
-					end
-						
-					pl:ChatPrint("CVAR "..v[1]..' '..tostring(val))
-				end
-					
-
 			end,"developers")
 
 			aowl.AddCommand("cexec", function(ply, line, target, ...)
 				local ent = easylua.FindEntity(target)
 
 				if ent:IsPlayer() then
-					return ent:SendLua(string.format("LocalPlayer():ConCommand(%q)", table.concat({...}, " ")))
+					local str = table.concat({...}, " ")
+					ent:SendLua(string.format("LocalPlayer():ConCommand(%q)", str))
+					hook.Run("AowlTargetCommand", ply, "cexec", ent, str)
 				end
 
 				return false, aowl.TargetNotFound(target)
@@ -1353,13 +1326,14 @@ do -- added commands
 					if cleanup and cleanup.CC_Cleanup then
 						cleanup.CC_Cleanup(ent,"gmod_cleanup",{})
 					end
+					hook.Run("AowlTargetCommand", player, "cleanup", ent)
 					return
 				end
 
 				return false, aowl.TargetNotFound(target)
 			end, "developers")
 
-			aowl.AddCommand({"tidy", "clearcrap", "clearorphan", "garbagecollect", "gc", "cleanupdisconnected"}, function() 
+			aowl.AddCommand({"tidy", "clearcrap", "clearorphan", "garbagecollect", "gc", "cleanupdisconnected"}, function()
 				prop_owner.ResonanceCascade()
 			end,"developers")
 						
@@ -1375,16 +1349,29 @@ do -- added commands
 			
 			
 			
-			aowl.AddCommand("abort", function(player, line)
+			aowl.AddCommand({"abort", "stop"}, function(player, line)
 				aowl.AbortCountDown()
 			end, "developers")
 
 			aowl.AddCommand("map", function(ply, line, map, time)
-				if file.Exists("maps/"..map..".bsp", "GAME") then
+				if map and file.Exists("maps/"..map..".bsp", "GAME") then
 					time = tonumber(time) or 10
 					aowl.CountDown(time, "CHANGING MAP TO " .. map, function()
 						game.ConsoleCommand("changelevel " .. map .. "\n")
 					end)
+				else
+					return false, "map not found"
+				end
+			end, "developers")
+			
+			aowl.AddCommand("nextmap", function(ply, line, map)
+				ply:ChatPrint("The next map is "..game.NextMap())
+			end, "players")
+			
+			aowl.AddCommand("setnextmap", function(ply, line, map)
+				if map and file.Exists("maps/"..map..".bsp", "GAME") then
+					game.SetNextMap(map)
+					ply:ChatPrint("The next map is now "..game.NextMap())
 				else
 					return false, "map not found"
 				end
@@ -1396,7 +1383,7 @@ do -- added commands
 				local candidates = {}
 
 				for k, v in ipairs(maps) do
-					if v:find(map) then
+					if (not map or map=='') or v:find(map) then
 						table.insert(candidates, v:match("^(.*)%.bsp$"):lower())
 					end
 				end
@@ -1432,32 +1419,35 @@ do -- added commands
 			end, "developers")
 			
 
-			aowl.AddCommand("retry", function(player, line)
-					player:SendLua("LocalPlayer():ConCommand(\"retry\")")
+			aowl.AddCommand({"retry", "rejoin"}, function(player, line)
+				player:SendLua("LocalPlayer():ConCommand(\"retry\")")
 			end)
 
 			aowl.AddCommand("god",function(player, line)
-				local newdmgmode = tonumber(line) or (player:GetInfoNum("cl_dmg_mode") == 1 and 3 or 1)
+				local newdmgmode = tonumber(line) or (player:GetInfoNum("cl_dmg_mode", 0) == 1 and 3 or 1)
 				newdmgmode = math.floor(math.Clamp(newdmgmode, 1, 4))
-				player:SendLua("LocalPlayer():ConCommand('cl_dmg_mode '.."..newdmgmode..")")
-				if newdmgmode == 1 then
-					player:ChatPrint("God mode enabled.")
-				elseif newdmgmode == 3 then
-					player:ChatPrint("God mode disabled.")
-				else
-					player:ChatPrint(string.format("Damage mode set to %d.", newdmgmode))
-				end
+				player:SendLua([[
+					pcall(include, "autorun/translation.lua") local L = translation and translation.L or function(s) return s end
+					LocalPlayer():ConCommand('cl_dmg_mode '.."]]..newdmgmode..[[")
+					if (]]..newdmgmode..[[) == 1 then
+						chat.AddText(L"God mode enabled.") 
+					elseif (]]..newdmgmode..[[) == 3 then
+						chat.AddText(L"God mode disabled.")
+					else
+						chat.AddText(string.format(L"Damage mode set to ".."%d.", (]]..newdmgmode..[[)))
+					end
+				]])
 			end)
 
-			aowl.AddCommand("name", function(player, line)
+			aowl.AddCommand({"name","nick","setnick","setname","nickname"}, function(player, line)
 				if line then
 					line=line:Trim()
 					if(line=="") or line:gsub(" ","")=="" then
-						return false,"Can't have an empty name!"
+						line = nil
 					end
-					if #line>40 then 
+					if line and #line>40 then
 						if not line.ulen or line:ulen()>40 then
-							return false,"my god what are you doing" 
+							return false,"my god what are you doing"
 						end
 					end
 				end
@@ -1468,16 +1458,16 @@ do -- added commands
 				end)
 			end)
 			
-			aowl.AddCommand("restart", function(player, line)
-				local time = math.max(tonumber(line) or 0, 1)
-
-				aowl.CountDown(time, "RESTARTING SERVER", function()
+			aowl.AddCommand("restart", function(player, line, seconds, reason)
+				local time = math.max(tonumber(seconds) or 20, 1)
+								
+				aowl.CountDown(time, "RESTARTING SERVER" .. (reason and reason ~= "" and Format(" (%s)", reason) or ""), function()
 					game.ConsoleCommand("changelevel " .. game.GetMap() .. "\n")
 				end)
 			end, "developers")
 
 			aowl.AddCommand("reboot", function(player, line, target)
-				local time = math.max(tonumber(line), 1)
+				local time = math.max(tonumber(line) or 20, 1)
 
 				aowl.CountDown(time, "SERVER IS REBOOTING", function()
 					BroadcastLua("LocalPlayer():ConCommand(\"disconnect; snd_restart; retry\")")
@@ -1495,6 +1485,7 @@ do -- added commands
 				if ent:IsPlayer() and rank then
 					rank = rank:lower():Trim()
 					ent:SetUserGroup(rank, true) -- rank == "players") -- shouldn't it force-save no matter what?
+					hook.Run("AowlTargetCommand", player, "rank", ent, rank)
 				end
 			end, "owners")
 
@@ -1546,13 +1537,13 @@ do -- added commands
 		end
 	end
 
-	aowl.AddCommand("decals",function() all:Cexec('r_cleardecals') end,"developers")
+	aowl.AddCommand("decals",function() all:ConCommand('r_cleardecals') end,"developers")
 	
 	do -- fakedie
 		local Tag="fakedie"
 		if SERVER then
 			util.AddNetworkString(Tag)
-			aowl.AddCommand("fakedie", function(pl, cmd, killer, icon, swap) 
+			aowl.AddCommand("fakedie", function(pl, cmd, killer, icon, swap)
 				
 				local victim=pl:Name()
 				local killer=killer or ""
@@ -1572,13 +1563,13 @@ do -- added commands
 				net.Broadcast()
 			end,"developers")
 		else
-			net.Receive(Tag,function(len) 
+			net.Receive(Tag,function(len)
 				local victim=net.ReadString()
 				local killer=net.ReadString()
 				local icon=net.ReadString()
 				local killer_team=net.ReadFloat()
 				local victim_team=net.ReadFloat()
-				GAMEMODE:AddDeathNotice( killer, killer_team, icon, victim, victim_team )	
+				GAMEMODE:AddDeathNotice( killer, killer_team, icon, victim, victim_team )
 			end)
 		end
 	end
@@ -1617,7 +1608,7 @@ do -- added commands
 				local owner
 				for k,v in pairs(cents) do
 					count=count+1
-					if t[k] then 
+					if t[k] then
 						lagc=lagc+1
 					end
 					if not owner and IsValid(k:CPPIGetOwner()) then
@@ -1627,7 +1618,7 @@ do -- added commands
 			
 				if count>(tonumber(minresult) or 5) then
 					for k,all in pairs(player.GetHumans()) do
-						all:ChatPrint("Found lagging contraption with "..lagc..'/'..count.." lagging ents (Owner: "..tostring(owner)..")")
+						PrintMessage(3,"Found lagging contraption with "..lagc..'/'..count.." lagging ents (Owner: "..tostring(owner)..")")
 					end
 				end
 			end
@@ -1640,10 +1631,10 @@ do -- added commands
 		if SERVER then
 			util.AddNetworkString(Tag)
 			
-			aowl.AddCommand("physenv",function(pl) 
+			aowl.AddCommand("physenv",function(pl)
 				net.Start(Tag)
 					net.WriteTable(physenv.GetPerformanceSettings())
-				net.Send(pl)	
+				net.Send(pl)
 			end)
 		end
 
@@ -1657,7 +1648,7 @@ do -- added commands
 				local old=physenv.GetPerformanceSettings()
 				for k,v in pairs(t) do
 					Msg"[EEK] "print("Changing "..tostring(k)..': ',old[k] or "???","->",v)
-					all:ChatPrint("[PHYSENV] "..k.." changed from "..tostring(old[k] or "UNKNOWN").." to "..tostring(v))
+					PrintMessage(3,"[PHYSENV] "..k.." changed from "..tostring(old[k] or "UNKNOWN").." to "..tostring(v))
 				end
 				physenv.SetPerformanceSettings(t)
 				return
@@ -1716,13 +1707,13 @@ do -- added commands
 						umsg.Short(-1)
 					umsg.End()
 					if callback then
-						aowlMsg("Countdown") print("'"..tostring(msg).."' finished, calling "..tostring(callback) )
+						aowlMsg("countdown", "'"..tostring(msg).."' finished, calling "..tostring(callback))
 						callback()
 					else
 						if seconds<1 then
-							aowlMsg("Countdown") print("Aborted" )
+							aowlMsg("countdown", "aborted")
 						else
-							aowlMsg("Countdown") print("'"..tostring(msg).."' finished. Initated without callback by "..tostring(source))
+							aowlMsg("countdown", "'"..tostring(msg).."' finished. Initated without callback by "..tostring(source))
 						end
 					end
 				end
@@ -1738,7 +1729,7 @@ do -- added commands
 						umsg.String(msg)
 					umsg.End()
 					local date = os.prettydate and os.prettydate(seconds) or seconds.." seconds"
-					aowlMsg("Countdown") print("'"..msg.."' in "..date )
+					aowlMsg("countdown", "'"..msg.."' in "..date )
 				else
 					timer.Remove "__countdown__"
 					timer.Remove "__countbetween__"
@@ -1776,7 +1767,7 @@ do -- added commands
 			
 			local function DrawWarning()
 				surface.SetFont("aowl_restart")
-				local messageWidth = surface.GetTextSize(CONFIG.Warning)
+				local messageWidth = surface.GetTextSize(L(CONFIG.Warning))
 
 				surface.SetDrawColor(255, 50, 50, 100 + (math.sin(CurTime() * 3) * 80))
 				surface.DrawRect(0, 0, ScrW(), ScrH())
@@ -1792,7 +1783,7 @@ do -- added commands
 				surface.SetTextColor(Color(50, 50, 50, 255))
 
 				local y = 200
-				for _, messageLine in ipairs(string.Split(CONFIG.Warning, "\n")) do
+				for _, messageLine in ipairs(string.Split(L(CONFIG.Warning), "\n")) do
 					local w, h = surface.GetTextSize(messageLine)
 					w = w or 56
 					surface.SetTextPos((ScrW() / 2) - w / 2, y)
@@ -1810,7 +1801,7 @@ do -- added commands
 				surface.SetTextColor(255, 255, 255, 255)
 				if(CurTime() - CONFIG.LastPopup > 0.5) then
 					for i = 1, 3 do
-						CONFIG.PopupText[i] = table.Random(CONFIG.Popups)
+						CONFIG.PopupText[i] = L(table.Random(CONFIG.Popups))
 						local w, h = surface.GetTextSize(CONFIG.PopupText[i])
 						CONFIG.PopupPos[i] = {math.random(1, ScrW() - w), math.random(1, ScrH() - h) }
 					end
@@ -1864,7 +1855,7 @@ do -- added commands
 				end
 			end)
 		end
-	end	
+	end
 end
 
 do -- groups
@@ -1988,29 +1979,30 @@ do -- groups
 
 			self:SetTeam(team.GetIDByName("players"))
 			self:SetNetworkedString("UserGroup", name)
-
+			--[[
 			umsg.Start("aowl_join_team")
 				umsg.Entity(self)
 			umsg.End()
+			--]]
 
 			if force == false or #name == 0 then return end
 
 			name = name:lower()
 
 			if force or (not table.HasValue(dont_store, name) and list[name]) then
-				local users = luadata.ReadFile("aowl/users.txt")
+				local users = luadata.ReadFile(USERSFILE)
 					users = clean_users(users, self:SteamID())
 					users[name] = users[name] or {}
 					users[name][self:SteamID()] = self:Nick():gsub("%A", "") or "???"
 				file.CreateDir("aowl")
-				luadata.WriteFile("aowl/users.txt", users)
+				luadata.WriteFile(USERSFILE, users)
 				
-				aowlMsg("Rank") print(string.format("Changing %s (%s) usergroup to %s",self:Nick(), self:SteamID(), name))
+				aowlMsg("rank", string.format("Changing %s (%s) usergroup to %s",self:Nick(), self:SteamID(), name))
 			end
 		end
 
 		function aowl.GetUserGroupFromSteamID(id)
-			for name, users in pairs(luadata.ReadFile("aowl/users.txt")) do
+			for name, users in pairs(luadata.ReadFile(USERSFILE)) do
 				for steamid, nick in pairs(users) do
 					if steamid == id then
 						return name, nick
@@ -2034,7 +2026,7 @@ do -- groups
 			return false
 		end
 
-
+		local users_file_date,users_file_cache=-2,nil
 		hook.Add("PlayerSpawn", "PlayerAuthSpawn", function(ply)
 
 			ply:SetUserGroup("players")
@@ -2043,11 +2035,18 @@ do -- groups
 				ply:SetUserGroup("owners")
 				return
 			end
-
-			local users = luadata.ReadFile("aowl/users.txt")
-
-			for name, users in pairs(users) do
-				for steamid in pairs(users) do
+			
+			local timestamp = file.Time(USERSFILE, "DATA")
+			timestamp = timestamp and timestamp > 0 and timestamp or 0/0
+			
+			
+			if users_file_date ~= timestamp then
+				users_file_cache = luadata.ReadFile( USERSFILE ) or {}
+				users_file_date = timestamp
+			end
+			
+			for name, users_file_cache in pairs(users_file_cache) do
+				for steamid in pairs(users_file_cache) do
 					if ply:SteamID() == steamid or ply:UniqueID() == steamid then
 						ply:SetUserGroup(name, false)
 					end
@@ -2086,7 +2085,7 @@ do -- groups
 			end
 			]]
 			local META = FindMetaTable("Player")
-			local _R_Player_GetCount = META.GetCount 
+			local _R_Player_GetCount = META.GetCount
 			function META.GetCount(self,limit,minus)
 				if(self.Unrestricted) then
 					return -1

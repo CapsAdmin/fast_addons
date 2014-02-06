@@ -32,7 +32,7 @@ if SERVER then
 	end
 end
 
-if CLIENT then    
+if CLIENT then
 	hook.Add("RenderScene", "attach_ragdoll_think", function()
 		for key, ply in pairs(player.GetAll()) do
 			local ent = ply:GetAttachedRagdoll()
@@ -67,7 +67,7 @@ if CLIENT then
 								wep:SetAngles(ply:EyeAngles())
 								wep:SetupBones()
 								wep:DrawModel()
-							end						
+							end
 
 							self:DrawModel()
 							hook.Call("PostAttachedRagdollDraw",GAMEMODE,ply,self)
@@ -81,7 +81,7 @@ if CLIENT then
 				end
 
 				if ent.ragdoll and IsEntity(ent.ragdoll) then
-					hook.Call("OnAttachedRagdollUpdate", GAMEMODE, ply, ent.ragdoll)          
+					hook.Call("OnAttachedRagdollUpdate", GAMEMODE, ply, ent.ragdoll)
 				end
 			end
 		end
@@ -90,9 +90,9 @@ end
 
 -- examples
 
-if CLIENT then 
+if CLIENT then
 
-	local bones = 
+	local bones =
 	{
 		[0] = "ValveBiped.Bip01_Pelvis",
 
@@ -108,7 +108,7 @@ if CLIENT then
 		[7] = "ValveBiped.Bip01_R_Hand",
 
 		[8] = "ValveBiped.Bip01_R_Thigh",
-		[9] = "ValveBiped.Bip01_R_Calf",  
+		[9] = "ValveBiped.Bip01_R_Calf",
 
 		[10] = "ValveBiped.Bip01_Head1",
 
@@ -167,7 +167,7 @@ if CLIENT then
 
 		else
 			ply.ragattach_jump = false
-			for rag_bone_index, ply_bone_name in pairs(bones) do			
+			for rag_bone_index, ply_bone_name in pairs(bones) do
 				local pos, ang = ply:GetBonePosition(ply:LookupBone(ply_bone_name))
 				local phys = rag:GetPhysicsObjectNum(rag_bone_index)
 

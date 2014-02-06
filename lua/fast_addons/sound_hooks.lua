@@ -10,5 +10,5 @@ function ENTITY:EmitSound(...)
 		return old_hook_emit_sound(ent, path, volume, pitch)
 	end
 
-	return old_hook_emit_sound(self, ... ) 
-end 
+	return old_hook_emit_sound(self, ... )
+end

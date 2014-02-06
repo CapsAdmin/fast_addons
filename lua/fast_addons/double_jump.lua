@@ -44,17 +44,17 @@ local default_power = 260
 -- hook
 	hook.Add("KeyPress", "double_jump", function(ply, key)
 		if key == IN_JUMP then
-			if 
+			if
 				ply:GetMoveType() == MOVETYPE_WALK and
-				ply:GetVelocity().z > -60 and 
-				(ply.double_jumped or 0) < ply:GetDoubleJumpTimes() and 
-				ply.double_jump_allowed ~= false and 
+				ply:GetVelocity().z > -60 and
+				(ply.double_jumped or 0) < ply:GetDoubleJumpTimes() and
+				ply.double_jump_allowed ~= false and
 				not ply:IsOnGround()
 			then
 				local mult = (1 + ply.double_jumped / ply:GetDoubleJumpTimes())
 
-				if SERVER then 
-					ply:EmitSound(Format("weapons/crossbow/hitbod%s.wav", math.random(2)), 70, math.random(90,110) * mult ) 
+				if SERVER then
+					ply:EmitSound(Format("weapons/crossbow/hitbod%s.wav", math.random(2)), 70, math.random(90,110) * mult )
 				end
 				ply:SetVelocity(Vector(0,0,default_power))
 				ply:ViewPunch(Angle(default_power*0.01,0,0))
@@ -79,9 +79,9 @@ local default_power = 260
 		end
 	end)
 
-	if CLIENT then 	
-		usermessage.Hook("bhop", function(u) 
-			LocalPlayer():SetSuperJumpMultiplier(u:ReadFloat()) 
-		end) 
+	if CLIENT then
+		usermessage.Hook("bhop", function(u)
+			LocalPlayer():SetSuperJumpMultiplier(u:ReadFloat())
+		end)
 	end
 --

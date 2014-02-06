@@ -1,6 +1,6 @@
 hook.Add("HUDShouldDraw", "hide_hud", function(element)
-	if  
-		( element == "CHudHealth" and ( not LocalPlayer():IsValid() or LocalPlayer():Health() == 100 ) ) or 
+	if
+		( element == "CHudHealth" and ( not LocalPlayer():IsValid() or LocalPlayer():Health() == 100 ) ) or
 		--element == "CHudAmmo" or
 		--element == "CHudSecondaryAmmo" or
 		element == "CHudSuitPower" or

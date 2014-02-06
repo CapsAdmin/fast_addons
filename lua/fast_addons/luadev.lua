@@ -263,7 +263,7 @@ if SERVER then
 
 	luadev.ReceiveScript = luadev.RunInternal
 	
-	hook.Add("AowlInitialized", "luadev_aowl_commands", function()		
+	hook.Add("AowlInitialized", "luadev_aowl_commands", function()
 		aowl.AddCommand("l", function(ply, line, target)
 			if not line or line=="" then return end
 			timer.Simple(0,function()luadev.RunOnServer(line, nil, ply)end)
@@ -451,7 +451,7 @@ do -- uploader
 							net.WriteByte(selected)
 							net.WriteString(name)
 							net.WriteString(self.code)
-						net.SendToServer()			
+						net.SendToServer()
 				end
 			end
 

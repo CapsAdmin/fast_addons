@@ -14,9 +14,9 @@ function request(id, question, name, callback, gender)
 	
 	if not session or (not session.cookie and not session.getting_cookie) then
 		
-		session = 
+		session =
 		{
-			cookie, 
+			cookie,
 			getting_cookie = true
 		}
 		
@@ -33,14 +33,14 @@ function request(id, question, name, callback, gender)
 			local header = str:match("(.-\10\13)")
 			header = luasocket.HeaderToTable(header)
 			
-			session.cookie = header["Set-Cookie"]			
+			session.cookie = header["Set-Cookie"]
 			request(id, question, name, callback, gender)
 			
 			session.getting_cookie = nil
 		end
 			
 		sessions[id] = session
-	else			
+	else
 		local socket = luasocket.Client("tcp")
 		
 		socket:Connect("www.a-i.com", 80)
@@ -60,7 +60,7 @@ function request(id, question, name, callback, gender)
 				end
 			end
 		end
-	end	
+	end
 end
 
 alan = {Ask = request}

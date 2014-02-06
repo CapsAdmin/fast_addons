@@ -1,10 +1,10 @@
-local handle_path = function(path, plain) 
+local handle_path = function(path, plain)
 	file.CreateDir("stdlua") -- hhh
 	
 	path = "stdlua/" .. path
 	
 	if not plain then
-		path = (path):gsub("%.", "_") .. ".txt" 
+		path = (path):gsub("%.", "_") .. ".txt"
 	end
 	
 	return path

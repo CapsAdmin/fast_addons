@@ -3,7 +3,7 @@ do -- meta
 
 	function PLAYER:IsBeingPhysgunned()
 		local pl = self._is_being_physgunned
-		if pl then 
+		if pl then
 			if isentity(pl) and not IsValid(pl) then
 				return false
 			end
@@ -19,24 +19,30 @@ do -- meta
 		return self._physgun_immune == true
 	end
 end
+if CLIENT then
+	CreateClientConVar("physgun_dont_touch_me","0",true,true)
+end
 
 hook.Add("PhysgunPickup", "player_grab", function(ply, ent)
-	if not ent:IsPlayer() then return end
-	if ent:IsPhysgunImmune() or ent:IsBeingPhysgunned() then return end
-	if not ply:CheckUserGroupLevel("moderators") then 
+	local canphysgun = ent:IsPlayer() and not ent:IsPhysgunImmune() and not ent:IsBeingPhysgunned()
+	if not canphysgun then return end
 	
-		-- anyone can physgun him if banned
-		if not ent.IsBanned or not ent:IsBanned() then
-			return
-		end
-		
+	if ent.IsFriend then
+		canphysgun = ent:IsFriend(ply) and ent:GetInfoNum("physgun_dont_touch_me",0)==0 and ply:GetInfoNum("physgun_dont_touch_me",0)==0
+	else
+		canphysgun = ply:IsAdmin()
 	end
+	canphysgun = canphysgun or ent:IsBot()
+	canphysgun = canphysgun or ( ent.IsBanned and ent:IsBanned()) 
+	canphysgun = canphysgun or ply.Unrestricted
+		
+	if not canphysgun then return end
 	
 	if IsValid(ent._is_being_physgunned) then
 		if ent._is_being_physgunned~=ply then return end
 	end
 	
-	ent._is_being_physgunned = ply		
+	ent._is_being_physgunned = ply
 
 	ent:SetMoveType(MOVETYPE_NONE)
 	ent:SetOwner(ply)

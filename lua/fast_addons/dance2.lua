@@ -3,11 +3,11 @@ local function is_dancing(ply)
 end
 	
 if CLIENT then
-	local bpm = CreateClientConVar("dance_bpm", 120, true, true)	
+	local bpm = CreateClientConVar("dance_bpm", 120, true, true)
 		
 	hook.Add("ShouldDrawLocalPlayer", "dance", function(ply)
 		if is_dancing(ply) then
-			return true	
+			return true
 		end
 	end)
 	
@@ -37,12 +37,12 @@ if CLIENT then
 					last = time
 					
 					local temp = 0
-					for k,v in pairs(beats) do temp = temp + v end									
+					for k,v in pairs(beats) do temp = temp + v end
 					temp = temp / #beats
 					temp = 1 / temp
 					
 					if #beats > 5 then
-						table.remove(beats, 1)	
+						table.remove(beats, 1)
 					end
 					
 					RunConsoleCommand("dance_bpm", (temp * 60))
@@ -81,14 +81,14 @@ if SERVER then
 		ply:SetNetData("dance_bpm", tonumber(args[1]))
 	end)
 	
-	local function addcmd()		
-		aowl.AddCommand("dance2", function(ply)		
+	local function addcmd()
+		aowl.AddCommand("dance2", function(ply)
 			if not ply:GetNetData("dancing") then
 				aowl.Message(ply, "Dance mode enabled!")
 				aowl.Message(ply, "Tap space to the beat!")
-				ply:SetNetData("dancing", true) 
+				ply:SetNetData("dancing", true)
 			else
-				aowl.Message(ply, "Dance mode disabled.")			
+				aowl.Message(ply, "Dance mode disabled.")
 				ply:SetNetData("dancing", false)
 			end
 		end)
@@ -96,10 +96,16 @@ if SERVER then
 	
 	if aowl then
 		addcmd()
-	else	
+	else
 		hook.Add("AowlInitialized", "dance2", function()
 			addcmd()
 			hook.Remove("AowlInitialized", "dance2")
 		end)
 	end
+	
+	hook.Add("PlayerDeath", "DancingDeath", function(ply)
+		if ply:GetNetData("dancing") then
+			ply:ConCommand("aowl dance2")
+		end
+	end)
 end
