@@ -18,8 +18,8 @@ local function load_files(dir)
 	for _, luafile in pairs((file.Find(dir .. "/client/*.lua", "LUA"))) do
 		local path = string.format(dir .. "/client/%s", luafile)
 		
-		if CLIENT then 
-			MakeEnum(luafile) 
+		if CLIENT then
+			MakeEnum(luafile)
 			include(path)
 		end
 
