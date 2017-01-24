@@ -1,7 +1,7 @@
 local default_times = 0
 local default_power = 260
 
--- meta
+do -- meta
 	local META = FindMetaTable("Player")
 
 	function META:SetDoubleJumpTimes(times, dont_update_client)
@@ -39,49 +39,47 @@ local default_power = 260
 	function META:GetDubleJumpPower()
 		return self.super_jump_multiplier or default_power
 	end
---
+end
 
--- hook
-	hook.Add("KeyPress", "double_jump", function(ply, key)
-		if key == IN_JUMP then
-			if
-				ply:GetMoveType() == MOVETYPE_WALK and
-				ply:GetVelocity().z > -60 and
-				(ply.double_jumped or 0) < ply:GetDoubleJumpTimes() and
-				ply.double_jump_allowed ~= false and
-				not ply:IsOnGround()
-			then
-				local mult = (1 + ply.double_jumped / ply:GetDoubleJumpTimes())
+hook.Add("KeyPress", "double_jump", function(ply, key)
+	if key == IN_JUMP then
+		if
+			ply:GetMoveType() == MOVETYPE_WALK and
+			ply:GetVelocity().z > -60 and
+			(ply.double_jumped or 0) < ply:GetDoubleJumpTimes() and
+			ply.double_jump_allowed ~= false and
+			not ply:IsOnGround()
+		then
+			local mult = (1 + ply.double_jumped / ply:GetDoubleJumpTimes())
 
-				if SERVER then
-					ply:EmitSound(Format("weapons/crossbow/hitbod%s.wav", math.random(2)), 70, math.random(90,110) * mult )
-				end
-				ply:SetVelocity(Vector(0,0,default_power))
-				ply:ViewPunch(Angle(default_power*0.01,0,0))
-				ply.CalcIdeal = ACT_MP_JUMP
-
-				ply:AnimRestartMainSequence()
-
-				ply.double_jump_allowed = false
-				ply.double_jumped = (ply.double_jumped or 0) + 1
-			return end
-
-			if ply:IsOnGround() then
-				ply.double_jump_allowed = true
-				ply.double_jumped = 0
+			if SERVER then
+				ply:EmitSound(Format("weapons/crossbow/hitbod%s.wav", math.random(2)), 70, math.random(90,110) * mult )
 			end
-		end
-	end)
+			ply:SetVelocity(Vector(0,0,default_power))
+			ply:ViewPunch(Angle(default_power*0.01,0,0))
+			ply.CalcIdeal = ACT_MP_JUMP
 
-	hook.Add("KeyRelease", "double_jump", function(ply, key)
-		if key == IN_JUMP then
+			ply:AnimRestartMainSequence()
+
+			ply.double_jump_allowed = false
+			ply.double_jumped = (ply.double_jumped or 0) + 1
+		return end
+
+		if ply:IsOnGround() then
 			ply.double_jump_allowed = true
+			ply.double_jumped = 0
 		end
-	end)
-
-	if CLIENT then
-		usermessage.Hook("bhop", function(u)
-			LocalPlayer():SetSuperJumpMultiplier(u:ReadFloat())
-		end)
 	end
---
+end)
+
+hook.Add("KeyRelease", "double_jump", function(ply, key)
+	if key == IN_JUMP then
+		ply.double_jump_allowed = true
+	end
+end)
+
+if CLIENT then
+	usermessage.Hook("bhop", function(u)
+		LocalPlayer():SetSuperJumpMultiplier(u:ReadFloat())
+	end)
+end
