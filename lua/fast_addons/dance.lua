@@ -82,7 +82,7 @@ if SERVER then
 	end)
 
 	local function addcmd()
-		aowl.AddCommand("dance2", function(ply)
+		aowl.AddCommand("dance", function(ply)
 			if not ply:GetNWBool("dancing") then
 				aowl.Message(ply, "Dance mode enabled!")
 				aowl.Message(ply, "Tap space to the beat!")
@@ -97,15 +97,15 @@ if SERVER then
 	if aowl then
 		addcmd()
 	else
-		hook.Add("AowlInitialized", "dance2", function()
+		hook.Add("AowlInitialized", "dance", function()
 			addcmd()
-			hook.Remove("AowlInitialized", "dance2")
+			hook.Remove("AowlInitialized", "dance")
 		end)
 	end
 
 	hook.Add("PlayerDeath", "DancingDeath", function(ply)
 		if ply:GetNWBool("dancing") then
-			ply:ConCommand("aowl dance2")
+			ply:ConCommand("aowl dance")
 		end
 	end)
 end
