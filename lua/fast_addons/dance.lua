@@ -2,6 +2,10 @@ local function is_dancing(ply)
 	return ply:GetNWBool("dancing")
 end
 
+local function set_dancing(ply, b)
+	ply:SetNWBool("dancing", b)
+end
+
 if CLIENT then
 	local bpm = CreateClientConVar("dance_bpm", 120, true, true)
 
@@ -83,13 +87,12 @@ if SERVER then
 
 	local function addcmd()
 		aowl.AddCommand("dance", function(ply)
-			if not ply:GetNWBool("dancing") then
-				aowl.Message(ply, "Dance mode enabled!")
-				aowl.Message(ply, "Tap space to the beat!")
-				ply:SetNWBool("dancing", true)
+			if not is_dancing(ply) then
+				aowl.Message(ply, "Dance mode enabled. Tap space to the beat!")
+				set_dancing(ply, true)
 			else
 				aowl.Message(ply, "Dance mode disabled.")
-				ply:SetNWBool("dancing", false)
+				set_dancing(ply, false)
 			end
 		end)
 	end
@@ -104,8 +107,8 @@ if SERVER then
 	end
 
 	hook.Add("PlayerDeath", "DancingDeath", function(ply)
-		if ply:GetNWBool("dancing") then
-			ply:ConCommand("aowl dance")
+		if is_dancing(ply) then
+			set_dancing(ply, false)
 		end
 	end)
 end
