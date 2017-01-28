@@ -60,7 +60,7 @@ end
 
 function META:SetNick(nick)
 	nick = nick or self:RealNick()
-	if #string.Trim(string.gsub(nick,"%^%d","")) == 0 then
+	if #string.Trim(nick,string.gsub(nick,"%^%d","")) == 0 then
 		nick = self:RealNick()
 	end
 	for k, v in pairs(player.GetAll()) do
@@ -69,7 +69,7 @@ function META:SetNick(nick)
 		end
 	end
 	if SERVER and type(nick) == "string" or type(nick) == "nil" then
-		//hook.Call("NickChange", nil, self, self:GetNWString("nick_override", self:RealName()), nick)
+		--hook.Call("NickChange", nil, self, self:GetNWString("nick_override", self:RealName()), nick)
 		self:SetNWString("nick_override", nick)
 		playernick.save(self, nick)
 	end
