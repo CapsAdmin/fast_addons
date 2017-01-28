@@ -60,7 +60,7 @@ end
 
 function META:SetNick(nick)
 	nick = nick or self:RealNick()
-	if #string.Trim(nick,string.gsub(nick,"%^%d","")) == 0 then
+	if #string.Trim((string.gsub(nick,"%^%d",""))) == 0 then
 		nick = self:RealNick()
 	end
 	for k, v in pairs(player.GetAll()) do
