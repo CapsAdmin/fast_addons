@@ -23,6 +23,8 @@
 ]]
 luadata = luadata or {} local s = luadata
 
+if not file.IsDir(luadata_options, "DATA") then file.CreateDir(luadata_options) end
+
 luadata.EscapeSequences = {
 	[("\a"):byte()] = [[\a]],
 	[("\b"):byte()] = [[\b]],
@@ -199,7 +201,14 @@ do -- option extension
 		encode = util.TableToJSON
 		
 		MsgN("[luadata] reverting to json since glon cannot be found")
-	end
+	else
+ +		
+ +		-- oh ye!
+ +		decode = glon.decode
+ +		encode = glon.encode
+ +		
+ +--		MsgN("[luadata] glon was found")
+ +	end
 
 	function luadata.AccessorFunc(tbl, func_name, var_name, nw, def)
 		tbl["Set" .. func_name] = function(self, val)
