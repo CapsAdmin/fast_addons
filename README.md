@@ -1,4 +1,2 @@
-fast_addons
-===========
-
-misc gmod scripts that dont deserve their own repository (yet?)
+## the successor of this repository can be found here
+https://github.com/PAC3-Server/notagain/
